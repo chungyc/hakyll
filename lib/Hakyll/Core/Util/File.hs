@@ -6,14 +6,17 @@ module Hakyll.Core.Util.File
     ( makeDirectories
     , getRecursiveContents
     , removeDirectory
+    , withPermissions
     ) where
 
 
 --------------------------------------------------------------------------------
+import           Control.Exception   (throw)
 import           Control.Monad       (filterM, forM)
-import           System.Directory    (createDirectoryIfMissing,
+import           System.Directory    (createDirectoryIfMissing, doesPathExist,
                                       doesDirectoryExist, getDirectoryContents)
 import           System.FilePath     (takeDirectory, (</>))
+import           System.IO.Error     (catchIOError, isPermissionError)
 #ifndef mingw32_HOST_OS
 import           Control.Monad       (when)
 import           System.Directory    (removeDirectoryRecursive)
@@ -33,29 +36,41 @@ makeDirectories = createDirectoryIfMissing True . takeDirectory
 
 --------------------------------------------------------------------------------
 -- | Get all contents of a directory.
+--
+-- If a directory is encountered for which you do not have
+-- permission, the directory will be skipped instead of
+-- an exception being thrown.
+--
+-- If a dangling\/broken symbolic link is encountered, then it will
+-- be skipped (since returning it may cause callers to throw exceptions).
 getRecursiveContents :: (FilePath -> IO Bool)  -- ^ Ignore this file/directory
                      -> FilePath               -- ^ Directory to search
-                     -> IO [FilePath]          -- ^ List of files found
+                     -> IO [FilePath]          -- ^ List of files found for which you have permissions
 getRecursiveContents ignore top = go ""
   where
     isProper x
         | x `elem` [".", ".."] = return False
         | otherwise            = not <$> ignore x
 
-    go dir     = do
-        dirExists <- doesDirectoryExist (top </> dir)
+    getProperDirectoryContents absDir =
+        filterM isProper =<< withPermissions (getDirectoryContents absDir) []
+
+    go relDir = do
+        let absDir = top </> relDir
+        dirExists <- doesDirectoryExist absDir
         if not dirExists
             then return []
             else do
-                names <- filterM isProper =<< getDirectoryContents (top </> dir)
-                paths <- forM names $ \name -> do
-                    let rel = dir </> name
-                    isDirectory <- doesDirectoryExist (top </> rel)
+                names <- getProperDirectoryContents absDir
+                fmap concat . forM names $ \name -> do
+                    let relPath = relDir </> name
+                        absPath = top </> relPath
+                    isDirectory <- doesDirectoryExist absPath
                     if isDirectory
-                        then go rel
-                        else return [rel]
-
-                return $ concat paths
+                        then go relPath
+                        else do
+                            pathExists <- doesPathExist absPath
+                            return $ if pathExists then [relPath] else []
 
 
 --------------------------------------------------------------------------------
@@ -85,3 +100,15 @@ retryWithDelay i x
     | i == 1    = x
     | otherwise = catch x $ \(_::SomeException) -> threadDelay 100 >> retryWithDelay (i-1) x
 #endif
+
+--------------------------------------------------------------------------------
+-- | Perform an IO action, catching any permission errors and returning
+--   a default value in their place.  All other exceptions are rethrown.
+withPermissions :: IO a
+                -> a  -- ^ Default value to return in case of a permission error
+                -> IO a
+withPermissions act onError
+    = act `catchIOError` \e ->
+        if isPermissionError e
+            then pure onError
+            else throw e

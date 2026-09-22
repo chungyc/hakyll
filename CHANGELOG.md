@@ -4,9 +4,59 @@ title: Releases
 
 # Releases
 
-## Hakyll 4.16.4.0 (unreleased)
+## 4.17.1.0
 
-- Fixed an issue where compressing CSS with `clamp` expressions would 
+- Added support for `aeson` 2.3
+- Added support for `pandoc` 3.11 (#1110)
+- Re-export `Hakyll.Core.Dependencies` from `Hakyll` (#1104)
+
+## 4.17.0.0
+
+This release is nearly identical to 4.16.8.0. However, 4.16.8.0 contains a breaking change
+which was not caught. Therefore, release 4.16.8.0 is deprecated on Hackage, and 4.17.0.0 should
+be preferred
+
+- Added support for QuickCheck 2.17 and 2.18 (#1099).
+
+## 4.16.8.0
+
+- Added support for djot for pandoc 3.1.12+ (#1096)
+- Added support for pandoc 3.9 (#1095)
+- Added support for declaring metadata-only dependencies (#1084).
+- Added support for AsciiDoc for pandoc 3.8.3+ (#1089).
+- Added support for tasty-1.5.4+ by disabling threaded tests.
+
+## Hakyll 4.16.7.1 (2025-09-06)
+
+- Added support for pandoc 3.8 (#1080).
+
+## Hakyll 4.16.7.0 (2025-08-29)
+
+- Validate the output of XML-based feed functions such as `renderRss` by default (#1078).
+- Bump `containers` upper bound to include 0.8.
+- Add support for Typst (#1067).
+
+## Hakyll 4.16.6.0 (2025-02-18)
+
+- Do not crawl directories for which we do not have permissions
+  with `Hakyll.Core.Util.File.getRecursiveContents`. This used to
+  throw an exception.
+- Do not return broken symbolic links from
+  `Hakyll.Core.Util.File.getRecursiveContents`.  This used to cause
+  subsequent code to throw exceptions (e.g., when it attempts to
+  `getModificationTime`) (#1065) (Contribution by Wren Romano).
+- Ignore files in `dist-newstyle` and `.stack-work` directories, which
+  are Haskell build directories.
+
+## Hakyll 4.16.5.0 (2025-01-11)
+
+- GHC 9.12 compatibility: bump `template-haskell` upper bound to include 2.23
+- Add support for `nocite` metadata field to `processPandocBiblio` and
+    `processPandocBiblios` (#1058) (contribution by Tony Zorman)
+
+## Hakyll 4.16.4.0 (2024-12-08)
+
+- Fixed an issue where compressing CSS with `clamp` expressions would
     result in invalid CSS (#1021) (contribution by Laurent P. René de Cotret)
 - Added `boolFieldM` (#1044) (contribution by 0xd34df00d)
 - Run HLint as part of GitHub Actions (#1045) (contribution by Yoo Chung)
@@ -114,7 +164,7 @@ title: Releases
     Alexander Batischev)
 - Allow `pandoc` 3.0. Note that the behavior of Hakyll's `readPandocBiblios` and
     `readPandocBiblio` is different whether pandoc 2 or 3 is installed
-    (contribution by Laurent P. René de Cotret) 
+    (contribution by Laurent P. René de Cotret)
 - Bump `mtl` upper bound to allow 2.3 (contribution by Alexander Batischev)
 - Bump `pandoc` upper bound to allow 3.1 (contribution by Laurent P. René de
     Cotret)

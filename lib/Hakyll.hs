@@ -4,6 +4,7 @@
 module Hakyll
     ( module Hakyll.Core.Compiler
     , module Hakyll.Core.Configuration
+    , module Hakyll.Core.Dependencies
     , module Hakyll.Core.File
     , module Hakyll.Core.Identifier
     , module Hakyll.Core.Identifier.Pattern
@@ -40,6 +41,7 @@ module Hakyll
 --------------------------------------------------------------------------------
 import           Hakyll.Core.Compiler
 import           Hakyll.Core.Configuration
+import           Hakyll.Core.Dependencies
 import           Hakyll.Core.File
 import           Hakyll.Core.Identifier
 import           Hakyll.Core.Identifier.Pattern

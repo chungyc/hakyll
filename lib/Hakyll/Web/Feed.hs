@@ -19,30 +19,44 @@
 --
 -- In addition, the posts should be named according to the rules for
 -- 'Hakyll.Web.Template.Context.dateField'
+--
+-- Note that for XML-based feeds (i.e. Atom and RSS) field values are not escaped!
+-- However, the default 'renderRss' and 'renderAtom' functions will validate the
+-- produced XML. Use the -NoValidate functions instead if you need to skip this
+-- validation.
 module Hakyll.Web.Feed
     ( FeedConfiguration (..)
     , renderRss
+    , renderRssNoValidate
     , renderAtom
+    , renderAtomNoValidate
     , renderJson
     , renderRssWithTemplates
+    , renderRssWithTemplatesNoValidate
     , renderAtomWithTemplates
+    , renderAtomWithTemplatesNoValidate
     , renderJsonWithTemplates
+    , validateXMLFeed
     ) where
 
 
 --------------------------------------------------------------------------------
 import           Hakyll.Core.Compiler
+import           Hakyll.Core.Compiler.Internal (compilerThrow)
 import           Hakyll.Core.Item
-import           Hakyll.Core.Util.String     (replaceAll)
+import           Hakyll.Core.Util.String       (replaceAll)
 import           Hakyll.Web.Template
 import           Hakyll.Web.Template.Context
 import           Hakyll.Web.Template.List
 
 
 --------------------------------------------------------------------------------
-import           Data.FileEmbed              (makeRelativeToProject)
-import           System.FilePath             ((</>))
-import Text.Printf (printf)
+import           Data.FileEmbed                (makeRelativeToProject)
+import           System.FilePath               ((</>))
+import           Text.Printf                   (printf)
+import           Control.Exception             (displayException)
+import           Text.XML                      (parseText, def)
+import qualified Data.Text.Lazy as T
 
 
 --------------------------------------------------------------------------------
@@ -161,8 +175,40 @@ renderFeed feedType feedTpl itemTpl config itemContext items = do
         XmlFeed  -> id
         JsonFeed -> mapContextBy (== "description") escapeString
 
+
+--------------------------------------------------------------------------------
+-- | Validate that a feed contains only correct XML.
+validateXMLFeed :: Item String -> Compiler (Item String)
+validateXMLFeed rendered = case parseText def $ T.pack (itemBody rendered) of
+      Right _ -> pure rendered
+      Left err -> compilerThrow
+        ["Generated feed contains invalid XML (perhaps you id not escape a metadata field?)",
+          displayException err]
+
+
 --------------------------------------------------------------------------------
 -- | Render an RSS feed using given templates with a number of items.
+--
+-- The resulting feed will not be validated. Prefer to use 'renderRssWithTemplates'
+-- when possible.
+--
+-- @since 4.16.7.0
+renderRssWithTemplatesNoValidate ::
+       Template                -- ^ Feed template
+    -> Template                -- ^ Item template
+    -> FeedConfiguration       -- ^ Feed configuration
+    -> Context String          -- ^ Item context
+    -> [Item String]           -- ^ Feed items
+    -> Compiler (Item String)  -- ^ Resulting feed
+renderRssWithTemplatesNoValidate feedTemplate itemTemplate config context = renderFeed
+    XmlFeed feedTemplate itemTemplate config
+    (makeItemContext "%a, %d %b %Y %H:%M:%S UT" context)
+
+
+--------------------------------------------------------------------------------
+-- | Render an RSS feed using given templates with a number of items.
+--
+-- The resulting RSS feed will be validated automatically.
 renderRssWithTemplates ::
        Template                -- ^ Feed template
     -> Template                -- ^ Item template
@@ -170,13 +216,35 @@ renderRssWithTemplates ::
     -> Context String          -- ^ Item context
     -> [Item String]           -- ^ Feed items
     -> Compiler (Item String)  -- ^ Resulting feed
-renderRssWithTemplates feedTemplate itemTemplate config context = renderFeed
-    XmlFeed feedTemplate itemTemplate config
-    (makeItemContext "%a, %d %b %Y %H:%M:%S UT" context)
+renderRssWithTemplates feedTemplate itemTemplate config context items =
+  renderRssWithTemplatesNoValidate feedTemplate itemTemplate config context items
+  >>= validateXMLFeed
 
 
 --------------------------------------------------------------------------------
 -- | Render an Atom feed using given templates with a number of items.
+--
+-- The resulting feed will not be validated. Prefer to use 'renderAtomWithTemplates'
+-- when possible.
+--
+-- @since 4.16.7.0
+renderAtomWithTemplatesNoValidate ::
+       Template                -- ^ Feed template
+    -> Template                -- ^ Item template
+    -> FeedConfiguration       -- ^ Feed configuration
+    -> Context String          -- ^ Item context
+    -> [Item String]           -- ^ Feed items
+    -> Compiler (Item String)  -- ^ Resulting feed
+renderAtomWithTemplatesNoValidate feedTemplate itemTemplate config context items = renderFeed
+    XmlFeed feedTemplate itemTemplate config
+    (makeItemContext "%Y-%m-%dT%H:%M:%SZ" context)
+    items
+
+
+--------------------------------------------------------------------------------
+-- | Render an Atom feed using given templates with a number of items.
+--
+-- The resulting Atom feed will be validated automatically.
 renderAtomWithTemplates ::
        Template                -- ^ Feed template
     -> Template                -- ^ Item template
@@ -184,9 +252,9 @@ renderAtomWithTemplates ::
     -> Context String          -- ^ Item context
     -> [Item String]           -- ^ Feed items
     -> Compiler (Item String)  -- ^ Resulting feed
-renderAtomWithTemplates feedTemplate itemTemplate config context = renderFeed
-    XmlFeed feedTemplate itemTemplate config
-    (makeItemContext "%Y-%m-%dT%H:%M:%SZ" context)
+renderAtomWithTemplates feedTemplate itemTemplate config context items =
+  renderAtomWithTemplatesNoValidate feedTemplate itemTemplate config context items
+  >>= validateXMLFeed
 
 
 --------------------------------------------------------------------------------
@@ -205,20 +273,54 @@ renderJsonWithTemplates feedTemplate itemTemplate config context = renderFeed
 
 --------------------------------------------------------------------------------
 -- | Render an RSS feed with a number of items.
+--
+-- The resulting feed will not be validated. Prefer to use 'renderRss'
+-- when possible.
+--
+-- @since 4.16.7.0
+renderRssNoValidate :: FeedConfiguration       -- ^ Feed configuration
+          -> Context String          -- ^ Item context
+          -> [Item String]           -- ^ Feed items
+          -> Compiler (Item String)  -- ^ Resulting feed
+renderRssNoValidate = renderRssWithTemplatesNoValidate rssTemplate rssItemTemplate
+
+
+--------------------------------------------------------------------------------
+-- | Render an RSS feed with a number of items.
+--
+-- The resulting RSS feed will be validated automatically.
 renderRss :: FeedConfiguration       -- ^ Feed configuration
           -> Context String          -- ^ Item context
           -> [Item String]           -- ^ Feed items
           -> Compiler (Item String)  -- ^ Resulting feed
-renderRss = renderRssWithTemplates rssTemplate rssItemTemplate
+renderRss config context items = renderRssNoValidate config context items
+  >>= validateXMLFeed
 
 
 --------------------------------------------------------------------------------
 -- | Render an Atom feed with a number of items.
+--
+-- The resulting feed will not be validated. Prefer to use 'renderAtom'
+-- when possible.
+--
+-- @since 4.16.7.0
+renderAtomNoValidate :: FeedConfiguration       -- ^ Feed configuration
+           -> Context String          -- ^ Item context
+           -> [Item String]           -- ^ Feed items
+           -> Compiler (Item String)  -- ^ Resulting feed
+renderAtomNoValidate = renderAtomWithTemplatesNoValidate atomTemplate atomItemTemplate
+
+
+--------------------------------------------------------------------------------
+-- | Render an Atom feed with a number of items.
+--
+-- The resulting Atom feed will be validated automatically.
 renderAtom :: FeedConfiguration       -- ^ Feed configuration
            -> Context String          -- ^ Item context
            -> [Item String]           -- ^ Feed items
            -> Compiler (Item String)  -- ^ Resulting feed
-renderAtom = renderAtomWithTemplates atomTemplate atomItemTemplate
+renderAtom config context items = renderAtomNoValidate config context items
+  >>= validateXMLFeed
 
 
 --------------------------------------------------------------------------------

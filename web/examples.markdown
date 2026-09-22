@@ -9,11 +9,6 @@ interesting resource to learn from as well. If you're using Hakyll for your
 site, and the source code is available, please notify me so I can add you to
 this list. This list has no particular ordering.
 
-Note that there is also a [Hakyll CSS garden] which has some themes you can use
-directly with the default Hakyll site.
-
-[Hakyll CSS garden]: http://katychuang.com/hakyll-cssgarden/gallery/
-
 - <https://jaspervdj.be/>,
   [source](https://github.com/jaspervdj/jaspervdj)
 - <https://www.haskell.org/>,
@@ -148,3 +143,13 @@ directly with the default Hakyll site.
   [source](https://github.com/Sahel13/Sahel13.github.io)
 - <https://www.cis.upenn.edu/~plclub/>,
   [source](https://github.com/plclub/plclub-web)
+- <https://roki.dev/>,
+  [source](https://github.com/falgon/roki-web)
+- <https://julesh.com/>,
+  [source](https://github.com/jules-hedges/jules-hedges.github.io)
+- <https://notes.8pit.net/>,
+  [source](https://git.8pit.net/site/)
+- <https://jrrom.com/>,
+  [source](https://github.com/jrrom/website)
+- <https://huangxindong.github.io/>,
+  [source](https://github.com/HuangxinDong/HuangxinDong.github.io)

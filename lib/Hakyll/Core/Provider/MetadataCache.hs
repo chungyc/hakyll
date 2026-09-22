@@ -2,12 +2,14 @@
 module Hakyll.Core.Provider.MetadataCache
     ( resourceMetadata
     , resourceBody
+    , resourceLookupMetadataCache
     , resourceInvalidateMetadataCache
     ) where
 
 
 --------------------------------------------------------------------------------
 import           Control.Monad                 (unless)
+import           Data.Maybe                    (fromMaybe)
 import           Hakyll.Core.Identifier
 import           Hakyll.Core.Metadata
 import           Hakyll.Core.Provider.Internal
@@ -22,9 +24,7 @@ resourceMetadata p r
     | otherwise                = do
         -- TODO keep time in md cache
         load p r
-        Store.Found (BinaryMetadata md) <- Store.get (providerStore p)
-            [name, toFilePath r, "metadata"]
-        return md
+        fromMaybe mempty <$> resourceLookupMetadataCache p r
 
 
 --------------------------------------------------------------------------------
@@ -34,6 +34,18 @@ resourceBody p r = do
     Store.Found bd <- Store.get (providerStore p)
         [name, toFilePath r, "body"]
     maybe (resourceString p r) return bd
+
+
+--------------------------------------------------------------------------------
+-- | Perform a lookup for metadata in the cache only.
+-- Useful internally for invalidation.
+resourceLookupMetadataCache :: Provider -> Identifier -> IO (Maybe Metadata)
+resourceLookupMetadataCache p r = do
+    result <- Store.get (providerStore p) [name, toFilePath r, "metadata"]
+    pure $ case result of
+      Store.Found (BinaryMetadata m) -> Just m
+      Store.NotFound                 -> Nothing
+      Store.WrongType _ _            -> error "unexpected WrongType"
 
 
 --------------------------------------------------------------------------------

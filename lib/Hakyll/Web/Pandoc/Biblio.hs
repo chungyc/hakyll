@@ -15,6 +15,7 @@
 {-# LANGUAGE Arrows                     #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Web.Pandoc.Biblio
     ( CSL (..)
@@ -44,13 +45,16 @@ import           Hakyll.Core.Compiler.Internal
 import           Hakyll.Core.Identifier
 import           Hakyll.Core.Identifier.Pattern (fromGlob)
 import           Hakyll.Core.Item
+import           Hakyll.Core.Metadata          (getMetadataField)
 import           Hakyll.Core.Writable
 import           Hakyll.Web.Pandoc
 import           Text.Pandoc                   (Extension (..), Pandoc,
-                                                ReaderOptions (..),
+                                                PandocPure, ReaderOptions (..),
                                                 enableExtension)
 import qualified Text.Pandoc                   as Pandoc
+import           Text.Pandoc.Builder           (setMeta)
 import qualified Text.Pandoc.Citeproc          as Pandoc (processCitations)
+import           Text.Pandoc.Walk              (Walkable (query))
 import           System.FilePath               (addExtension, takeExtension)
 
 
@@ -106,17 +110,47 @@ readPandocBiblios ropt csl biblios item = do
 
 
 --------------------------------------------------------------------------------
+
+-- | Process a bibliography file with the given style.
+--
+-- This function supports pandoc's
+-- <https://pandoc.org/chunkedhtml-demo/9.6-including-uncited-items-in-the-bibliography.html nocite>
+-- functionality when there is a @nocite@ metadata field present.
+--
+-- ==== __Example__
+--
+-- In your main function, first compile the respective files:
+--
+-- > main = hakyll $ do
+-- >   …
+-- >   match "style.csl" $ compile cslCompiler
+-- >   match "bib.bib"   $ compile biblioCompiler
+--
+-- Then, create a function like the following:
+--
+-- > processBib :: Item Pandoc -> Compiler (Item Pandoc)
+-- > processBib pandoc = do
+-- >   csl <- load @CSL    "bib/style.csl"
+-- >   bib <- load @Biblio "bib/bibliography.bib"
+-- >   processPandocBiblio csl bib pandoc
+--
+-- Now, feed this function to your pandoc compiler:
+--
+-- > myCompiler :: Compiler (Item String)
+-- > myCompiler = pandocItemCompilerWithTransformM myReader myWriter processBib
 processPandocBiblio :: Item CSL
                     -> Item Biblio
                     -> (Item Pandoc)
                     -> Compiler (Item Pandoc)
 processPandocBiblio csl biblio = processPandocBiblios csl [biblio]
 
+-- | Like 'processPandocBiblio', which see, but support multiple bibliography
+-- files.
 processPandocBiblios :: Item CSL
                      -> [Item Biblio]
                      -> (Item Pandoc)
                      -> Compiler (Item Pandoc)
-processPandocBiblios csl biblios item = do
+processPandocBiblios csl biblios item' = do
     -- It's not straightforward to use the Pandoc API as of 2.11 to deal with
     -- citations, since it doesn't export many things in 'Text.Pandoc.Citeproc'.
     -- The 'citeproc' package is also hard to use.
@@ -126,6 +160,12 @@ processPandocBiblios csl biblios item = do
     --
     -- So we load the CSL and Biblio files and pass them to Pandoc using the
     -- ersatz filesystem.
+
+    -- Honour nocite metadata fields
+    item <- getUnderlying >>= (`getMetadataField` "nocite") >>= \case
+        Nothing -> pure item'
+        Just x  -> withItemBody (pure . setMeta "nocite" x) item'
+
     let Pandoc.Pandoc (Pandoc.Meta meta) blocks = itemBody item
         cslFile = Pandoc.FileInfo zeroTime . unCSL $ itemBody csl
         bibFiles = zipWith (\x y ->
@@ -148,19 +188,30 @@ processPandocBiblios csl biblios item = do
             Map.insert "bibliography"
               (Pandoc.MetaList $ map (Pandoc.MetaString . T.pack . fst) bibFiles) $
             meta
-        errOrPandoc = Pandoc.runPure $ do
+
+    pandoc <- do
+        let p = Pandoc.Pandoc biblioMeta blocks
+        p' <- case Pandoc.lookupMeta "nocite" biblioMeta of
+            Just (Pandoc.MetaString nocite) -> do
+                Pandoc.Pandoc _ b <- runPandoc $
+                    Pandoc.readMarkdown defaultHakyllReaderOptions nocite
+                let nocites = Pandoc.MetaInlines . flip query b $ \case
+                        c@Pandoc.Cite{} -> [c]
+                        _               -> []
+                return $ setMeta "nocite" nocites p
+            _ -> return p
+        runPandoc $ do
             Pandoc.modifyPureState addBiblioFiles
-            Pandoc.processCitations $ Pandoc.Pandoc biblioMeta blocks
-
-    pandoc <- case errOrPandoc of
-        Left  e -> compilerThrow ["Error during processCitations: " ++ show e]
-        Right x -> return x
-
+            Pandoc.processCitations p'
     return $ fmap (const pandoc) item
 
   where
     zeroTime = Time.UTCTime (toEnum 0) 0
 
+    runPandoc :: PandocPure a -> Compiler a
+    runPandoc with = case Pandoc.runPure with of
+        Left  e -> compilerThrow ["Error during processCitations: " ++ show e]
+        Right x -> pure x
 
 --------------------------------------------------------------------------------
 -- | Compiles a markdown file via Pandoc. Requires the .csl and .bib files to be known to the compiler via match statements.
